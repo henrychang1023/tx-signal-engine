@@ -46,6 +46,7 @@ internal/engine/           表達式編譯／求值（expr-lang/expr）、Env/Qu
 cmd/quotecheck/            Phase 1：單次拉一筆 TX/MTX 資料並印出
 cmd/pollcheck/             Phase 2：驗證定時輪詢機制持續運作
 cmd/signalcheck/           Phase 3：單次呼叫——抓最新 TX/MTX 資料、印出所有參數、求值輸出 true/false
+cmd/server/                網頁介面：signalcheck 的邏輯包成 HTTP API + 內嵌前端頁面
 ```
 
 ## 使用方法
@@ -107,6 +108,35 @@ go run ./cmd/signalcheck -expr "TX.ask1 > TX.b1"
 TX 或 MTX 任一筆資料抓取失敗時，會印出錯誤訊息並以非 0 狀態碼結束，不會印出錯誤或不完整
 的判斷結果。
 
+### 4. 網頁介面（`server`）
+
+不想每次都開終端機打指令的話，可以跑一個網頁版：`signalcheck` 的邏輯原封不動包成
+HTTP API，前端是內嵌在執行檔裡的單一 HTML 頁面（無需另外安裝任何前端工具鏈），瀏覽器
+打開一個網址、輸入表達式、按按鈕就能看結果。
+
+```bash
+go run ./cmd/server            # 預設監聽 :8080
+go run ./cmd/server -addr=:9000  # 換 port
+```
+
+啟動後開瀏覽器到 `http://localhost:8080`，畫面上有一個表達式輸入框（預設值跟
+`signalcheck` 一樣）跟一個查詢按鈕，按下去會顯示 TX/MTX 目前所有參數跟 TRUE/FALSE
+結果。
+
+也可以直接打 API，不透過網頁：
+
+```bash
+curl "http://localhost:8080/api/signal?expr=TX.a1%20%3E%20TX.b1"
+# {"expr":"TX.a1 > TX.b1","tx":{...},"mtx":{...},"result":true}
+```
+
+跟 `signalcheck` 一樣，**每次請求都會即時重新呼叫資料源**，沒有背景輪詢或快取——這支
+API 預期使用者頂多個位數，所以沒有處理多人併發打上游 API 的節流問題；之後如果使用人數
+變多、或換成有配額限制的付費資料源，要再補上快取或 rate limit。
+
+表達式錯誤回 `400`、資料源請求失敗回 `502`，都是 JSON `{"error": "..."}`，網頁端會把
+錯誤訊息顯示出來而不是空白或當掉。
+
 ## 測試
 
 ```bash
@@ -114,7 +144,7 @@ go test ./...        # 跑全部單元測試
 go test ./... -v      # 顯示每個測試案例的名稱與結果
 ```
 
-三個套件都有測試：
+四個套件都有測試：
 
 - `internal/quote`：`Poller` 的快取行為——成功寫入、輪詢失敗時保留舊資料、錯誤在下次
   成功後自動清除、多商品互不干擾（用假的 `Provider` 驅動，不打真的網路）
@@ -123,6 +153,8 @@ go test ./... -v      # 顯示每個測試案例的名稱與結果
   （`-`/`NULL`/空字串等 TAIFEX 的佔位符）做了 table-driven 測試
 - `internal/engine`：表達式編譯期錯誤（未知欄位、非布林回傳、語法錯誤）+ 多組市場
   情境的求值案例（多空條件、量能門檻、跨商品比較、邏輯運算、`now` 時間函式）
+- `cmd/server`：HTTP handler 測試（`httptest`）——正常請求、預設表達式、編譯錯誤回
+  400、資料源失敗回 502、首頁 HTML 正確回傳
 
 > 這台環境沒有 C 編譯器，`go test -race` 因為 cgo 關閉跑不起來；`Poller` 目前只用單一
 > mutex 保護內部 map，邏輯單純，有 cgo 環境時可以再補跑一次確認。

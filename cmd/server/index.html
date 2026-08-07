@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台指訊號判斷引擎</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    max-width: 640px;
+    margin: 48px auto;
+    padding: 0 20px;
+    line-height: 1.6;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 0.2em; }
+  .hint { color: #888; font-size: 0.9rem; }
+  .hint code { background: rgba(128,128,128,0.15); padding: 0.1em 0.4em; border-radius: 4px; }
+  .row { display: flex; gap: 8px; margin: 20px 0; }
+  #expr {
+    flex: 1;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.95rem;
+    padding: 10px 12px;
+    border: 1px solid #888;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+  }
+  button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: white;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .error {
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: rgba(220,38,38,0.12);
+    color: #dc2626;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+  .signal {
+    display: inline-block;
+    font-size: 1.6rem;
+    font-weight: 700;
+    padding: 4px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .signal.true { background: rgba(22,163,74,0.15); color: #16a34a; }
+  .signal.false { background: rgba(220,38,38,0.15); color: #dc2626; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,0.25); }
+  th:first-child, td:first-child { text-align: left; }
+</style>
+</head>
+<body>
+  <h1>台指訊號判斷引擎</h1>
+  <p class="hint">
+    輸入布林表達式，可用變數：<code>TX</code>/<code>MTX</code> 的
+    <code>a1</code>/<code>b1</code>/<code>price</code>/<code>volume</code>/<code>time</code>，
+    以及 <code>now</code>。每次查詢都會即時重抓最新資料。
+  </p>
+  <div class="row">
+    <input id="expr" type="text" value="TX.a1 > TX.b1 && TX.volume > 1000" spellcheck="false">
+    <button id="run">查詢</button>
+  </div>
+  <div id="error" class="error" hidden></div>
+  <div id="result" hidden>
+    <div id="signal" class="signal"></div>
+    <table>
+      <thead>
+        <tr><th></th><th>date</th><th>price</th><th>volume</th><th>b1</th><th>a1</th></tr>
+      </thead>
+      <tbody id="quotes"></tbody>
+    </table>
+  </div>
+
+<script>
+const runBtn = document.getElementById('run');
+const exprInput = document.getElementById('expr');
+const errorBox = document.getElementById('error');
+const resultBox = document.getElementById('result');
+const signalBox = document.getElementById('signal');
+const quotesBody = document.getElementById('quotes');
+
+function cell(text) {
+  const td = document.createElement('td');
+  td.textContent = text;
+  return td;
+}
+
+async function run() {
+  errorBox.hidden = true;
+  resultBox.hidden = true;
+  runBtn.disabled = true;
+  runBtn.textContent = '查詢中…';
+  try {
+    const res = await fetch('/api/signal?expr=' + encodeURIComponent(exprInput.value));
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || ('HTTP ' + res.status));
+    }
+
+    signalBox.textContent = data.result ? 'TRUE' : 'FALSE';
+    signalBox.className = 'signal ' + (data.result ? 'true' : 'false');
+
+    quotesBody.innerHTML = '';
+    for (const [name, q] of [['TX', data.tx], ['MTX', data.mtx]]) {
+      const tr = document.createElement('tr');
+      tr.appendChild(cell(name));
+      tr.appendChild(cell(q.date));
+      tr.appendChild(cell(q.price));
+      tr.appendChild(cell(q.volume));
+      tr.appendChild(cell(q.b1));
+      tr.appendChild(cell(q.a1));
+      quotesBody.appendChild(tr);
+    }
+    resultBox.hidden = false;
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.hidden = false;
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = '查詢';
+  }
+}
+
+runBtn.addEventListener('click', run);
+exprInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+</script>
+</body>
+</html>
