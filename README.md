@@ -47,6 +47,7 @@ cmd/quotecheck/            Phase 1：單次拉一筆 TX/MTX 資料並印出
 cmd/pollcheck/             Phase 2：驗證定時輪詢機制持續運作
 cmd/signalcheck/           Phase 3：單次呼叫——抓最新 TX/MTX 資料、印出所有參數、求值輸出 true/false
 cmd/server/                網頁介面：signalcheck 的邏輯包成 HTTP API + 內嵌前端頁面
+scripts/build-release.sh   一次打包 Windows／macOS／Linux 的獨立執行檔到 dist/
 ```
 
 ## 使用方法
@@ -136,6 +137,26 @@ API 預期使用者頂多個位數，所以沒有處理多人併發打上游 API
 
 表達式錯誤回 `400`、資料源請求失敗回 `502`，都是 JSON `{"error": "..."}`，網頁端會把
 錯誤訊息顯示出來而不是空白或當掉。
+
+#### 打包成單一執行檔
+
+前端 HTML 是用 `//go:embed` 直接包進執行檔的，所以 `go build` 出來就是一個不用裝任何
+東西、雙擊就能跑的獨立檔案——不用另外裝 Go、Node 或任何 runtime。啟動時預設會自動打開
+瀏覽器（`-open=false` 可以關掉這個行為）。
+
+```bash
+go build -o tx-signal-engine-server.exe ./cmd/server   # 建目前平台的執行檔
+```
+
+要一次建 Windows／macOS／Linux 的版本，跑：
+
+```bash
+scripts/build-release.sh
+```
+
+會在 `dist/` 產生 4 個獨立執行檔（`windows-amd64.exe`、`darwin-amd64`、`darwin-arm64`、
+`linux-amd64`），每個都是約 13MB 的單一檔案，複製到別的電腦上不用裝任何東西直接雙擊
+（macOS/Linux 要先 `chmod +x`）就能開網頁介面。
 
 ## 測試
 

@@ -10,7 +10,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os/exec"
+	"runtime"
 
 	"tx-signal-engine/internal/engine"
 	"tx-signal-engine/internal/quote"
@@ -112,10 +115,51 @@ func newMux(s *server) *http.ServeMux {
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
+	openBrowser := flag.Bool("open", true, "open the default browser automatically on startup")
 	flag.Parse()
 
-	s := &server{provider: taifex.NewProvider()}
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	log.Printf("listening on %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, newMux(s)))
+	url := browserURL(ln.Addr().String())
+	log.Printf("listening on %s", ln.Addr())
+
+	if *openBrowser {
+		if err := openInBrowser(url); err != nil {
+			log.Printf("couldn't open browser automatically (%v) — open %s manually", err, url)
+		}
+	} else {
+		log.Printf("open %s in your browser", url)
+	}
+
+	s := &server{provider: taifex.NewProvider()}
+	log.Fatal(http.Serve(ln, newMux(s)))
+}
+
+// browserURL turns a listen address like "[::]:8080" or "127.0.0.1:8080"
+// into a URL a browser on the same machine can actually reach.
+func browserURL(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		port = addr
+	}
+	return "http://localhost:" + port + "/"
+}
+
+// openInBrowser launches the OS's default browser. Best-effort: a failure
+// here just means the user opens the URL themselves, so callers should log
+// and continue rather than treat it as fatal.
+func openInBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }
