@@ -8,46 +8,69 @@
 
 ## Quickstart（新電腦第一次使用）
 
-### 事先要裝好的東西
+有兩種拿到執行檔的方式：直接下載 [GitHub Release](https://github.com/henrychang1023/tx-signal-engine/releases/latest) 現成的平台執行檔（不用裝 Go），或是 clone 原始碼自己 `go build`。大部分情況建議直接下載 Release，除非你想改程式碼。
+
+### 方式一：下載 Release（推薦，不用裝 Go）
+
+#### 事先要裝好的東西
 
 | 東西 | 一定要嗎？ | 用途 |
 |---|---|---|
-| [Git](https://git-scm.com/) | 要 | 從 GitHub clone 這個 repo（也可以直接在 GitHub 網頁上下載 ZIP，不裝 Git 也行） |
-| [Go 1.23+](https://go.dev/dl/)（開發用 1.26.4） | 要 | 這個專案沒有另外提供打包好的執行檔下載，要自己 `go build`／`go run` |
 | [Python 3.12+](https://www.python.org/downloads/) | 選用 | 只有要用 **Shioaji 即時報價**才需要；不裝也能用，預設會走 TAIFEX 每日行情，不用任何密鑰 |
 | 永豐金證券帳戶 + Shioaji API Key/Secret | 選用 | 同上，只有要即時報價才需要；帳戶開設、API 金鑰申請請洽永豐金 Shioaji 官方文件 |
 
-### 步驟
+#### 步驟
 
-1. Clone 這個 repo，進到資料夾：
+1. 到 [Releases 頁面](https://github.com/henrychang1023/tx-signal-engine/releases/latest)，依作業系統下載對應檔案：
+   `tx-signal-engine-server-windows-amd64.exe`（Windows）／
+   `tx-signal-engine-server-darwin-amd64`（macOS Intel）／
+   `tx-signal-engine-server-darwin-arm64`（macOS Apple Silicon）／
+   `tx-signal-engine-server-linux-amd64`（Linux）。
+   macOS/Linux 下載後要先 `chmod +x`。
 
-   ```bash
-   git clone https://github.com/henrychang1023/tx-signal-engine.git
-   cd tx-signal-engine
-   ```
+2. 雙擊（或執行）它，會自動打開瀏覽器到 `http://localhost:8080`。不需要任何設定就能
+   查詢——預設資料源是免費、不用密鑰的 TAIFEX 每日行情。
 
-2. 建執行檔並執行（或跳過建檔，直接用 `go run` 跑起來測試）：
+3.（選用）要接**即時報價**的話，還需要這個 repo 裡的 `adapter/` 資料夾（Python 寫的
+   橋接程式，沒辦法打包進 Go 執行檔）：
 
-   ```bash
-   go build -o tx-signal-engine-server.exe ./cmd/server
-   ./tx-signal-engine-server.exe
-   ```
+   - 從 GitHub 網頁下載這個 repo 的 `adapter/` 資料夾，放到跟執行檔**同一個目錄**下
+   - 裝好 Python 環境：
 
-   會自動打開瀏覽器到 `http://localhost:8080`。不需要任何設定就能查詢——預設資料源是
-   免費、不用密鑰的 TAIFEX 每日行情。
+     ```bash
+     python -m venv adapter/.venv
+     adapter/.venv/Scripts/pip install -r adapter/requirements.txt   # Windows
+     adapter/.venv/bin/pip install -r adapter/requirements.txt       # macOS/Linux
+     ```
 
-3.（選用）要接**即時報價**的話：
-
-   ```bash
-   python -m venv adapter\.venv
-   adapter\.venv\Scripts\pip install -r adapter\requirements.txt
-   ```
-
-   裝好後回到網頁，展開「設定 Shioaji 即時報價」，貼上 API Key/Secret Key，按「啟用」——
-   Go 會自動幫你拉起 Python adapter 並切換到即時報價，之後每次重開程式都會自動用存好的
-   設定重新連線，不用每次都重輸入。
+   - 裝好後回到網頁，展開「設定 Shioaji 即時報價」，貼上 API Key/Secret Key，按
+     「啟用」——Go 會自動幫你拉起 Python adapter 並切換到即時報價，之後每次重開程式
+     都會自動用存好的設定重新連線，不用每次都重輸入。
 
    完整細節（手動模式、`-provider` flag、已知限制）見下方「即時報價（Shioaji）」章節。
+
+### 方式二：Clone 原始碼自己 build
+
+#### 事先要裝好的東西
+
+| 東西 | 一定要嗎？ | 用途 |
+|---|---|---|
+| [Git](https://git-scm.com/) | 要 | 從 GitHub clone 這個 repo |
+| [Go 1.23+](https://go.dev/dl/)（開發用 1.26.4） | 要 | 自己 `go build`／`go run` |
+| [Python 3.12+](https://www.python.org/downloads/) | 選用 | 同方式一，只有要即時報價才需要 |
+| 永豐金證券帳戶 + Shioaji API Key/Secret | 選用 | 同方式一 |
+
+#### 步驟
+
+```bash
+git clone https://github.com/henrychang1023/tx-signal-engine.git
+cd tx-signal-engine
+go build -o tx-signal-engine-server.exe ./cmd/server
+./tx-signal-engine-server.exe
+```
+
+`adapter/` 資料夾已經在 repo 裡了，不用另外下載；即時報價的設定步驟跟方式一的步驟 3
+相同。
 
 ## 目前進度
 
