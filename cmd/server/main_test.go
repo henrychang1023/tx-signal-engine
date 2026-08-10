@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"tx-signal-engine/internal/quote"
+	"tx-signal-engine/internal/shioajiproc"
 )
 
 type stubProvider struct {
@@ -120,5 +122,94 @@ func TestHandleIndex(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "台指訊號判斷引擎") {
 		t.Error("expected the index page to contain the page title")
+	}
+}
+
+func TestHandleShioajiStatus_Unconfigured(t *testing.T) {
+	s := &server{
+		provider:   healthyProvider(),
+		configPath: filepath.Join(t.TempDir(), "does-not-exist.json"),
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/shioaji/status", nil)
+	rec := httptest.NewRecorder()
+
+	newMux(s).ServeHTTP(rec, req)
+
+	var resp shioajiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Configured || resp.Active {
+		t.Errorf("resp = %+v, want Configured=false Active=false", resp)
+	}
+}
+
+func TestHandleShioajiStatus_ReflectsSavedConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := shioajiproc.Save(configPath, shioajiproc.Config{APIKey: "k", SecretKey: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{provider: healthyProvider(), configPath: configPath}
+	req := httptest.NewRequest(http.MethodGet, "/api/shioaji/status", nil)
+	rec := httptest.NewRecorder()
+
+	newMux(s).ServeHTTP(rec, req)
+
+	var resp shioajiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.Configured {
+		t.Errorf("resp = %+v, want Configured=true", resp)
+	}
+	// A saved config file doesn't imply an active connection until connectShioaji succeeds.
+	if resp.Active {
+		t.Errorf("resp = %+v, want Active=false", resp)
+	}
+}
+
+func TestHandleShioajiConfig_MissingFields(t *testing.T) {
+	s := &server{
+		provider:   healthyProvider(),
+		configPath: filepath.Join(t.TempDir(), "config.json"),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/shioaji/config", strings.NewReader(`{"api_key":"","secret_key":""}`))
+	rec := httptest.NewRecorder()
+
+	newMux(s).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleShioajiConfig_SavesAndReportsConnectFailure(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	s := &server{
+		provider:       healthyProvider(),
+		configPath:     configPath,
+		shioajiManager: shioajiproc.NewManager(t.TempDir(), 19999), // no adapter script here -> Start() fails fast
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/shioaji/config", strings.NewReader(`{"api_key":"k","secret_key":"s"}`))
+	rec := httptest.NewRecorder()
+
+	newMux(s).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// The credentials should still be persisted even though connecting failed,
+	// so a retry (or a fixed adapter install) doesn't require re-entering them.
+	saved, err := shioajiproc.Load(configPath)
+	if err != nil {
+		t.Fatalf("expected config to be saved despite connect failure: %v", err)
+	}
+	if saved.APIKey != "k" || saved.SecretKey != "s" {
+		t.Fatalf("saved config = %+v, want APIKey=k SecretKey=s", saved)
+	}
+
+	if s.currentProvider() == nil {
+		t.Fatal("provider should remain set (falling back to taifex) after a failed connect")
 	}
 }

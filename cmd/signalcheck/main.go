@@ -11,12 +11,16 @@ import (
 
 	"tx-signal-engine/internal/engine"
 	"tx-signal-engine/internal/quote"
+	"tx-signal-engine/internal/quote/shioaji"
 	"tx-signal-engine/internal/quote/taifex"
 )
 
 func main() {
 	expression := flag.String("expr", "TX.a1 > TX.b1 && TX.volume > 1000",
 		"boolean expression to evaluate, e.g. \"TX.a1 > TX.b1 && TX.volume > 1000\"")
+	providerName := flag.String("provider", "taifex", `quote source: "taifex" or "shioaji"`)
+	shioajiAdapterURL := flag.String("shioaji-adapter-url", "",
+		"base URL of the running shioaji_adapter.py (defaults to http://127.0.0.1:8787)")
 	flag.Parse()
 
 	rule, err := engine.Compile(*expression)
@@ -25,7 +29,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	provider := taifex.NewProvider()
+	var provider quote.Provider
+	switch *providerName {
+	case "taifex":
+		provider = taifex.NewProvider()
+	case "shioaji":
+		provider = shioaji.NewProvider(*shioajiAdapterURL)
+	default:
+		fmt.Fprintf(os.Stderr, "unknown -provider %q (want \"taifex\" or \"shioaji\")\n", *providerName)
+		os.Exit(1)
+	}
 
 	tx, err := provider.GetQuote(quote.TX)
 	if err != nil {

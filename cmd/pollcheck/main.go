@@ -14,15 +14,28 @@ import (
 	"time"
 
 	"tx-signal-engine/internal/quote"
+	"tx-signal-engine/internal/quote/shioaji"
 	"tx-signal-engine/internal/quote/taifex"
 )
 
 func main() {
 	pollInterval := flag.Duration("interval", 5*time.Minute, "how often to poll the upstream provider")
 	printInterval := flag.Duration("print-interval", 10*time.Second, "how often to print the cached state")
+	providerName := flag.String("provider", "taifex", `quote source: "taifex" or "shioaji"`)
+	shioajiAdapterURL := flag.String("shioaji-adapter-url", "",
+		"base URL of the running shioaji_adapter.py (defaults to http://127.0.0.1:8787)")
 	flag.Parse()
 
-	provider := taifex.NewProvider()
+	var provider quote.Provider
+	switch *providerName {
+	case "taifex":
+		provider = taifex.NewProvider()
+	case "shioaji":
+		provider = shioaji.NewProvider(*shioajiAdapterURL)
+	default:
+		fmt.Fprintf(os.Stderr, "unknown -provider %q (want \"taifex\" or \"shioaji\")\n", *providerName)
+		os.Exit(1)
+	}
 	symbols := []quote.Symbol{quote.TX, quote.MTX}
 	poller := quote.NewPoller(provider, symbols, *pollInterval)
 

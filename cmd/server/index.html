@@ -59,6 +59,26 @@
   table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
   th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,0.25); }
   th:first-child, td:first-child { text-align: left; }
+  details.setup {
+    margin: 20px 0;
+    padding: 12px 14px;
+    border: 1px solid rgba(128,128,128,0.3);
+    border-radius: 8px;
+  }
+  details.setup summary { cursor: pointer; font-weight: 600; }
+  details.setup .row { margin: 14px 0 4px; }
+  details.setup input[type="password"] {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #888;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.9rem;
+  }
+  .status-line { font-size: 0.9rem; margin: 4px 0 0; }
+  .status-line.ok { color: #16a34a; }
+  .status-line.warn { color: #d97706; }
 </style>
 </head>
 <body>
@@ -68,6 +88,18 @@
     <code>a1</code>/<code>b1</code>/<code>price</code>/<code>volume</code>/<code>time</code>，
     以及 <code>now</code>。每次查詢都會即時重抓最新資料。
   </p>
+
+  <details class="setup" id="shioaji-setup">
+    <summary>設定 Shioaji 即時報價</summary>
+    <p class="status-line" id="shioaji-status">載入中…</p>
+    <div class="row">
+      <input id="shioaji-key" type="password" placeholder="API Key" autocomplete="off" spellcheck="false">
+      <input id="shioaji-secret" type="password" placeholder="Secret Key" autocomplete="off" spellcheck="false">
+      <button id="shioaji-connect">啟用</button>
+    </div>
+    <div id="shioaji-error" class="error" hidden></div>
+  </details>
+
   <div class="row">
     <input id="expr" type="text" value="TX.a1 > TX.b1 && TX.volume > 1000" spellcheck="false">
     <button id="run">查詢</button>
@@ -90,6 +122,68 @@ const errorBox = document.getElementById('error');
 const resultBox = document.getElementById('result');
 const signalBox = document.getElementById('signal');
 const quotesBody = document.getElementById('quotes');
+
+const shioajiSetup = document.getElementById('shioaji-setup');
+const shioajiStatus = document.getElementById('shioaji-status');
+const shioajiKeyInput = document.getElementById('shioaji-key');
+const shioajiSecretInput = document.getElementById('shioaji-secret');
+const shioajiConnectBtn = document.getElementById('shioaji-connect');
+const shioajiError = document.getElementById('shioaji-error');
+
+function renderShioajiStatus(data) {
+  if (data.active) {
+    shioajiStatus.textContent = '目前資料源：Shioaji（即時報價）— 已連線';
+    shioajiStatus.className = 'status-line ok';
+    shioajiSetup.open = false;
+  } else if (data.configured) {
+    shioajiStatus.textContent = '目前資料源：TAIFEX（每日行情）— 已設定過 Shioaji key，但尚未連線成功'
+      + (data.error ? '：' + data.error : '');
+    shioajiStatus.className = 'status-line warn';
+  } else {
+    shioajiStatus.textContent = '目前資料源：TAIFEX（每日行情）— 尚未設定 Shioaji';
+    shioajiStatus.className = 'status-line';
+  }
+}
+
+async function loadShioajiStatus() {
+  try {
+    const res = await fetch('/api/shioaji/status');
+    const data = await res.json();
+    renderShioajiStatus(data);
+  } catch (err) {
+    shioajiStatus.textContent = '無法取得 Shioaji 狀態：' + err.message;
+    shioajiStatus.className = 'status-line warn';
+  }
+}
+
+async function connectShioaji() {
+  shioajiError.hidden = true;
+  shioajiConnectBtn.disabled = true;
+  shioajiConnectBtn.textContent = '連線中…（最多等 30 秒）';
+  try {
+    const res = await fetch('/api/shioaji/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: shioajiKeyInput.value, secret_key: shioajiSecretInput.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || ('HTTP ' + res.status));
+    }
+    shioajiKeyInput.value = '';
+    shioajiSecretInput.value = '';
+    await loadShioajiStatus();
+  } catch (err) {
+    shioajiError.textContent = err.message;
+    shioajiError.hidden = false;
+  } finally {
+    shioajiConnectBtn.disabled = false;
+    shioajiConnectBtn.textContent = '啟用';
+  }
+}
+
+shioajiConnectBtn.addEventListener('click', connectShioaji);
+loadShioajiStatus();
 
 function cell(text) {
   const td = document.createElement('td');

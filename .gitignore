@@ -6,3 +6,13 @@
 *.test
 *.out
 /dist/
+
+# Python adapter virtualenv / cache
+adapter/.venv/
+adapter/__pycache__/
+
+# Shioaji SDK's own runtime log
+shioaji.log
+
+# Shioaji credentials saved via the web UI (plaintext, machine-local)
+config.json
